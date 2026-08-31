@@ -7,7 +7,6 @@ date: "2026-08-31"
 Original code taken from: https://astrid-giugni.github.io/IDS_570_TAD/week-02-basics.html
 Accessed 2026-08-30
 
-
 ## Load packages
 
 ```{r packages, echo=FALSE, message=FALSE, warning=FALSE}
@@ -25,6 +24,10 @@ knitr::opts_chunk$set(echo = FALSE)
 
 
 ## I. Create a diagnostics table
+
+Begin with the tibble texts that you created in the Week 02 tutorial. In the tutorial, we tokenized, 
+removed stopwords, and counted words in a single pipeline. For this assignment, you will need to
+separate those operations so that you can examine the tokens before and after stopword removal.
 
 ```{r}
 ## Read and combine text files
@@ -63,6 +66,20 @@ all_stopwords <- bind_rows(stop_words, custom_stopwords) %>%
 all_stopwords %>% slice(1:10)
 ```
 
+First, create a tibble called words that contains one word token per row, using unnest_tokens().
+
+Create a tibble called corpus_diagnostics with one row per document that includes:
+• doc_title
+• total_tokens = total number of word tokens before stopword removal
+• tokens_after_stopwords = total number of tokens remaining after stopword removal
+• tokens_removed = number of tokens removed
+• percent_removed = percentage of the original tokens removed
+
+Your calculations should use the tidy workflow from the Week 02 tutorial.
+
+Hint: You already know how to remove stopwords using anti_join(). You will need to count the
+tokens before and after that operation and bring those results together.
+
 ```{r}
 ## Count words
 # Create tibble 'words' with one word token per row
@@ -93,10 +110,35 @@ corpus_diagnostics <- tokens_before %>%
 corpus_diagnostics
 ```
 
+*Interpretive questions for Section I: What percentage of each document was removed as stopwords? Is the percentage approximately the same for the two documents? What do these numbers tell you about how substantially stopword removal has transformed the texts that we will analyze? (4-6 sentences)*
+
+Our stopword removal process eliminated 56.6% of word tokens from Text A (“Circle of Commerce”) and 59.8% from Text B (“Free Trade”). Because these statistics only differ by a few percentage points (3.2%), I would say that fairly similar percentages of tokens were removed. Depending on the topics discussed in each of the two texts and whether or not they’re of similar lengths, however, the stopword removal percentage may not tell the whole story. 
+
+Given that more than half of the tokens was removed from each text, I would say that stopword removal has substantially reduced the amount of tokens scholars work with. Most of the stopwords specific to our analysis ("vnto", "haue", "doo", "hath", "bee", "ye", and “thee”) are pronouns or being verbs, which tells us that stopword removal aims to trim grammatical structures to focus on the subject matter of the text. These stopwords are also specific to Early Modern English; it is thus assumed that scholars using preprocessing methods already have an awareness of the linguistic structures used during these time periods and have strategically preselected them in order before undertaking the actual analyses of the historical texts.
+
 
 ## II. Compare the most frequent words before and after stopword removal
 
+Now investigate what stopword removal does to our impression of the texts.
+
+A. Before stopword removal
+
+Using the tokenized text before removing stopwords:
+1. Count the frequency of each word in each document.
+2. Identify the 15 most frequent words overall using the same procedure as the Week 02
+tutorial. Plot the same 15 words for both documents, as we did in the tutorial.
+3. Create a visualization of these words using the same general approach as the Week 02 word-
+frequency visualization.
+
+Your plot should:
+• show the 15 most frequent words in both documents;
+• show raw frequency on the x-axis;
+• use the side-by-side faceted layout from Week 02;
+• include appropriate axis labels and a title indicating that these results are before stopword
+removal.
+
 ```{r}
+## Setup
 # Frequencies before stopword removal
 word_counts_before <- words %>%
   count(doc_title, word, sort = TRUE) # same code as given
@@ -148,6 +190,23 @@ ggplot(word_plot_before, aes(x = n, y = word)) + #black magic happens thanks to 
   theme_minimal()
 ```
 
+B. After stopword removal
+
+Now repeat the analysis using the tokens after removing stopwords:
+1. Count the frequency of each remaining word overall.
+2. Find the 15 most frequent words overall.
+3. Create a second visualization using the same general format as your first plot.
+
+Your second plot should:
+• show the 15 most frequent words overall;
+• show raw frequency on the x-axis;
+• use the same side-by-side faceted layout;
+• include appropriate axis labels and a title indicating that these results are after stopword
+removal.
+
+Hint: You should be able to adapt code from the Week 02 tutorial for both visualizations. The
+important difference is which version of the tokens you use to calculate your word counts.
+
 ```{r}
 # Repeat same steps for most frequent words AFTER stopword removal 
 word_comparison_after <- word_counts_after %>%
@@ -183,8 +242,23 @@ ggplot(word_plot_after, aes(x = n, y = word)) +
   theme_minimal()
 ```
 
+*Interpretive questions for Section II: Compare your two visualizations. What dominates the frequency results before stopword removal? What becomes visible after stopword removal? Does removing stopwords make it easier to say something about the subject matter of these texts? Give at least two specific examples from your results. What information about the texts becomes less visible when we remove stopwords? (5-7 sentences)*
+
+Before stopword removal, common linguistic structures such as articles, prepositions, and conjunctions dominate the most frequent words. After stopword removal, the top 15 most frequent words are composed of nouns, which are references to the content of the texts and the topics discussed in them. As follows, removing stopwords gives scholars more information about the subject matter. For instance, while “exchange” is the 2nd most common word in “Circle of Commerce,” appearing more than 175 times, it only appears ~5 times in “Free Trade.” Similarly, while the keyword “malynes” emerges more than 150 in the former, it does not once in the latter, alluding to a divergence between the texts’ intended audiences (in that “malynes”—likely referring to merchant Gerard de Malynes—is not mentioned in “Free Trade”). 
+
+On the other hand, when stopwords are removed, grammatical and linguistic structures may be lost. For instance, the frequency of certain parts of speech may be indicative of the syntax common to the time period, which would be useful if one were conducting a linguistic analysis of the text.
+
 
 ## III. Test the effect of our custom stopword list
+
+In Week 02, we did not rely only on a standard English stopword list. We also added words that are
+common in Early Modern English but that we decided were not useful for our particular analysis.
+
+Now test what difference that decision makes.
+
+Create a new version of your cleaned tokens in which you remove the standard tidytext stopwords
+(stop_words), but do not remove the custom Early Modern stopwords (custom_stopwords) used in
+the tutorial.
 
 ```{r}
 # Remove the standard tidytext stopwords (stop_words) but not the custom Early Modern stopwords (custom_stopwords)
@@ -199,6 +273,13 @@ word_counts_no_standard <- words_no_standard_stopwords %>%
 
 word_counts_no_standard
 ```
+
+Find the 15 most frequent words overall under this alternative preprocessing decision.
+
+Compare these results with the results you obtained using the complete stopword list in Part II.
+
+You do not need to make another visualization for this section. A table showing the most
+frequent words and their counts is sufficient.
 
 ```{r}
 # Pivot table with top 15 most frequent words
@@ -216,3 +297,14 @@ top15_no_standard <- word_counts_no_standard %>%
 top15_no_standard
 ```
 
+*Interpretive questions for Section III: Identify at least three words whose presence helps explain why we created a custom stopword list. Why might these words be unhelpful if our goal is to identify the subject matter of the documents? Can you imagine a research question for which one of these words would be useful evidence? Based on this experiment, explain why there is no single, universally “correct” stopword list. (5-7 sentences)*
+
+When we do not exclude the custom Early Modern stopwords, “haue,” “bee,” and “hath” appear in the 15 most frequent words. If we were looking to analyze the subject matter of the texts and not their grammar or syntax, these words likely would not be as relevant or informative. Instead, it might be more helpful to capture nouns or adjectives, which might give us a better clue of the content, tone, or valence of the text. 
+
+On the other hand, if we wanted to use Misselden’s texts in a linguistic case study on Early Modern vs. Late Modern English grammar, this is a research question which would merit the inclusion of our seven custom stopwords. 
+
+If we look at the other twelve most frequent tokens in this exercise, “ſo,” “alſo,” and “ſuch” are also included. One could argue that these transition words should also be excluded in an analysis of the texts’ content. In the end, these decisions are left to the discretion of the scholar(s), who must be deliberate in the stopwords they select in order to conduct an effective analysis. 
+
+*Final reflection: In 3–5 sentences, respond to the following statement: A very naïve fellow student says: “Stopword removal is just data cleaning. It doesn’t affect the interpretation because we are only removing unimportant words.” Based on the analysis you completed for this homework, how would you answer this statement? Use at least one specific result from your analysis as evidence. (3-5 sentences)*
+
+The text is and of itself is merely a sample of data. Based on the goals of one’s analysis, one gets to decide what is “important”. For instance, one may choose to remove being verbs such as “haue,” “bee,” and “hath” if the topics in the text are of greater interest. On the other, one might choose other stopwords if examining the grammatical structures of Early Modern English. In order to answer their research questions, the stopwords scholars choose must reflect these priorities, whether it’s linguistic structure, subject matter, or something else. 
