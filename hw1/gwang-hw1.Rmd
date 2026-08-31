@@ -1,0 +1,218 @@
+---
+title: "gwang_hw1"
+output: html_document
+date: "2026-08-31"
+---
+
+Original code taken from: https://astrid-giugni.github.io/IDS_570_TAD/week-02-basics.html
+Accessed 2026-08-30
+
+
+## Load packages
+
+```{r packages, echo=FALSE, message=FALSE, warning=FALSE}
+library(readr)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(tidytext)
+library(ggplot2)
+library(forcats)
+library(tibble)
+library(scales)
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+## I. Create a diagnostics table
+
+```{r}
+## Read and combine text files
+# Downloaded text files to folder and followed same naming conventions
+file_a <- "texts/A07594__Circle_of_Commerce.txt"
+file_b <- "texts/B14801__Free_Trade.txt"
+
+# Read the raw text files into R
+text_a <- read_file(file_a)
+text_b <- read_file(file_b)
+
+# Combine into a tibble for tidytext workflows
+texts <- tibble(
+  doc_title = c("Text A", "Text B"),
+  text = c(text_a, text_b)
+)
+
+texts
+```
+
+```{r}
+## Create stopword list
+# Start with tidytext's built-in stopword list
+data("stop_words")
+
+# Add our own project-specific stopwords (you can, and will, expand this list later)
+custom_stopwords <- tibble(
+  word = c(
+    "vnto", "haue", "doo", "hath", "bee", "ye", "thee"
+  )
+)
+
+all_stopwords <- bind_rows(stop_words, custom_stopwords) %>%
+  distinct(word)
+
+all_stopwords %>% slice(1:10)
+```
+
+```{r}
+## Count words
+# Create tibble 'words' with one word token per row
+words <- texts %>%
+  unnest_tokens(word, text) # same code as given
+
+# All tokens
+tokens_before <- words %>%
+  count(doc_title, name = "total_tokens") # count tokens before
+
+# Remove stopwords
+words_after <- words %>%
+  anti_join(all_stopwords, by = "word") # anti_join to remove stopwords
+
+# Remaining tokens
+tokens_after <- words_after %>%
+  count(doc_title, name = "tokens_after_stopwords") # count tokens after
+
+# Create tibble 'corpus_diagnostics'
+corpus_diagnostics <- tokens_before %>%
+  left_join(tokens_after, by = "doc_title") %>%
+  mutate(
+    tokens_after_stopwords = coalesce(tokens_after_stopwords, 0L), # Replace NA's with 0
+    tokens_removed = total_tokens - tokens_after_stopwords,
+    percent_removed = (tokens_removed / total_tokens) * 100
+  )
+
+corpus_diagnostics
+```
+
+
+## II. Compare the most frequent words before and after stopword removal
+
+```{r}
+# Frequencies before stopword removal
+word_counts_before <- words %>%
+  count(doc_title, word, sort = TRUE) # same code as given
+
+word_counts_before
+
+# Frequencies after stopword removal
+word_counts_after <- words_after %>%
+  count(doc_title, word, sort = TRUE) 
+
+word_counts_after
+```
+
+```{r}
+# Plot frequent words
+plot_n_words <- 15  # changed from 20 to 15
+
+# Select most frequent words BEFORE stopword removal
+word_comparison_before <- word_counts_before %>%
+  pivot_wider(
+    names_from = doc_title,
+    values_from = n,
+    values_fill = 0
+  ) %>%
+  mutate(max_n = pmax(`Text A`, `Text B`)) %>%
+  arrange(desc(max_n))
+
+word_plot_before <- word_comparison_before %>%
+  slice_head(n = plot_n_words) %>%
+  pivot_longer(
+    cols = c(`Text A`, `Text B`),
+    names_to = "doc_title",
+    values_to = "n"
+  ) %>%
+  mutate(word = fct_reorder(word, n, .fun = max))
+
+ggplot(word_plot_before, aes(x = n, y = word)) + #black magic happens thanks to ggplot
+  geom_col() +
+  facet_wrap(~ doc_title, scales = "free_x") +
+  labs(
+    title = "Most frequent words (before stopwords removed)",
+    subtitle = paste0(
+      "Top ", plot_n_words,
+      " words by maximum frequency across both texts"
+    ),
+    x = "Word frequency",
+    y = NULL
+  ) +
+  theme_minimal()
+```
+
+```{r}
+# Repeat same steps for most frequent words AFTER stopword removal 
+word_comparison_after <- word_counts_after %>%
+  pivot_wider(
+    names_from = doc_title,
+    values_from = n,
+    values_fill = 0
+  ) %>%
+  mutate(max_n = pmax(`Text A`, `Text B`)) %>%
+  arrange(desc(max_n))
+
+word_plot_after <- word_comparison_after %>%
+  slice_head(n = plot_n_words) %>%
+  pivot_longer(
+    cols = c(`Text A`, `Text B`),
+    names_to = "doc_title",
+    values_to = "n"
+  ) %>%
+  mutate(word = fct_reorder(word, n, .fun = max))
+
+ggplot(word_plot_after, aes(x = n, y = word)) +
+  geom_col() +
+  facet_wrap(~ doc_title, scales = "free_x") +
+  labs(
+    title = "Most frequent words (after stopwords removed)",
+    subtitle = paste0(
+      "Top ", plot_n_words,
+      " words by maximum frequency across both texts"
+    ),
+    x = "Word frequency",
+    y = NULL
+  ) +
+  theme_minimal()
+```
+
+
+## III. Test the effect of our custom stopword list
+
+```{r}
+# Remove the standard tidytext stopwords (stop_words) but not the custom Early Modern stopwords (custom_stopwords)
+words_no_standard_stopwords <- words %>%
+  anti_join(stop_words, by = "word")
+
+words_no_standard_stopwords
+
+# Count (no standard tidytext stopwords)
+word_counts_no_standard <- words_no_standard_stopwords %>%
+  count(doc_title, word, sort = TRUE)
+
+word_counts_no_standard
+```
+
+```{r}
+# Pivot table with top 15 most frequent words
+top15_no_standard <- word_counts_no_standard %>%
+  pivot_wider(
+    names_from = doc_title,
+    values_from = n,
+    values_fill = 0
+  ) %>%
+  mutate(max_n = pmax(`Text A`, `Text B`)) %>%
+  arrange(desc(max_n)) %>%
+  slice_head(n = 15) %>%
+  select(word, `Text A`, `Text B`)
+
+top15_no_standard
+```
+
