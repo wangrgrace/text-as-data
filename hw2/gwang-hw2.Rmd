@@ -1,0 +1,283 @@
+---
+title: "gwang_hw2"
+output: html_document
+date: "2026-09-26"
+---
+
+Original code taken from:
+- https://astrid-giugni.github.io/IDS_570_TAD/week-03-dictionaries.html
+- https://astrid-giugni.github.io/IDS_570_TAD/week-04-representation.html
+
+## Load packages
+
+```{r packages, echo=FALSE, message=FALSE}
+library(readr)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(tidytext)
+library(quanteda)
+library(ggplot2)
+library(tibble)
+```
+
+## Setup and preprocessing
+
+Use exactly the same two texts as in Weeks 02–04:
+• Circle of Commerce (Text A)
+• Free Trade (Text B)
+
+Use the same file paths and naming conventions introduced in the tutorials.
+
+```{r setup}
+txt_circle <- read_file("texts/A07594__Circle_of_Commerce.txt")
+txt_free <- read_file("texts/B14801__Free_Trade.txt")
+txt_third <- read_file("texts/A06785.txt")
+
+texts <- tibble(
+  doc_title = c("Text A", "Text B", "A06785"),
+  text = c(txt_circle, txt_free, txt_third)
+) %>%
+  mutate(
+    text_norm = text %>%
+      str_replace_all("ſ", "s") %>% # normalize the “long s” (ſ) to s
+      str_replace_all("\\s+", " ") %>%
+      str_to_lower() # lowercase words only
+  )
+
+texts %>% select(doc_title, text_norm)
+```
+
+Stopwords were taken from the Week 04 tutorial along with tidytext's English stopword
+list. Punctuation, numbers, and symbols were removed. Tokens are composed of words
+only.
+
+```{r stopwords}
+data("stop_words")
+
+custom_stopwords <- c(
+  "vnto", "haue", "doo", "hath", "bee", "ye", "thee", "hee", "shall",
+  "hast", "doe", "beene", "thereof", "thus"
+)
+
+all_stopwords <- bind_rows(
+  stop_words %>% select(word),
+  tibble(word = custom_stopwords)
+) %>%
+  distinct(word)
+
+all_stopwords %>% slice_head(n = 10)
+```
+
+Create a tidy table with:
+• one row per word token
+• lowercase words
+• stopwords removed
+• Normalize the “long s” (ſ) to s, as we did in Week 03
+
+```{r tokens}
+clean_tokens <- texts %>%
+  select(doc_title, text_norm) %>%
+  unnest_tokens(word, text_norm, token = "words") %>%
+  filter(str_detect(word, "^[a-z]+$")) %>% # alphabetic words only
+  anti_join(all_stopwords, by = "word")
+
+clean_tokens %>% slice_head(n = 10)
+```
+
+## I. Raw-Count Sentiment Analysis
+
+Join the cleaned word tokens to the Bing sentiment lexicon. Use the Bing sentiment
+lexicon to label words as positive or negative. Create a summary table with one row
+per document that includes:
+
+• number of positive words
+• number of negative words
+• net sentiment (positive − negative)
+
+```{r raw-sentiment}
+bing <- get_sentiments("bing") # create Bing table
+
+# Bing labels some words ("envious", "enviously", and "enviousness") as both
+# positive and negative. I've chosen to keep both labels such that each occurrence
+# of these tokens contributes to both the positive and negative totals.
+raw_sentiment_words <- clean_tokens %>%
+  inner_join(bing, by = "word", relationship = "many-to-many") # keep tokens in dictionary
+
+raw_sentiment_summary <- raw_sentiment_words %>%
+  count(doc_title, sentiment, name = "word_count") %>% # count positive and negative words
+  complete(
+    doc_title = texts$doc_title,
+    sentiment = c("positive", "negative"),
+    fill = list(word_count = 0L)
+  ) %>%
+  pivot_wider(
+    names_from = sentiment,
+    values_from = word_count,
+    names_prefix = "raw_",
+    values_fill = 0 # replace NA values with 0
+  ) %>% # one row per document
+  mutate(raw_net_sentiment = raw_positive - raw_negative) %>% # calculate net sentiment
+  filter(doc_title %in% c("Text A", "Text B")) %>%
+  arrange(doc_title)
+
+raw_sentiment_summary
+```
+
+## II. TF-IDF-Weighted Sentiment Analysis
+
+### Setup and preprocessing
+
+Use the same preprocessing decisions for both analyses. The R objects will be different
+because Part I uses tidy data and Part II uses a quanteda DFM (to match the tutorials),
+but the underlying text-cleaning decisions should be the same.
+
+Then compute TF-IDF weights using dfm_tfidf(), as we did in Week 04.
+
+```{r tfidf-dfm}
+token_list <- clean_tokens %>%
+  group_by(doc_title) %>%
+  summarise(words = list(word), .groups = "drop") %>%
+  tibble::deframe()
+
+toks <- quanteda::as.tokens(token_list)
+dfm_mat <- dfm(toks) # build dfm_mat, our raw-count matrix
+tfidf_dfm <- dfm_tfidf(dfm_mat) # calculate tfidf_dfm to weigh words by frequency and distinctiveness
+
+dfm_mat
+```
+
+### Convert TF-IDF weights from quanteda matrix into tidy format
+
+The result of dfm_tfidf() is still a quanteda document-feature matrix. To join the words
+to the Bing dictionary, we need to turn that matrix back into a regular data frame and 
+then into a tidy format with one document-word combination per row.
+
+Your resulting table should contain at least:
+• the document name
+• the word
+• its TF-IDF weight
+
+Remove rows where the TF-IDF weight is 0.
+
+```{r tidy-tfidf}
+tfidf_wide <- convert(tfidf_dfm, to = "data.frame") %>%
+  rename(doc_title = doc_id) # resulting data table is wide (documents are rows and words are columns)
+
+tfidf_tidy <- tfidf_wide %>% # turn into tidy table
+  pivot_longer(
+    cols = -doc_title,
+    names_to = "word",
+    values_to = "tf_idf"
+  ) %>%
+  filter(tf_idf > 0, doc_title %in% c("Text A", "Text B")) # remove rows with no weight
+# Note: we are only analyzing Texts A & B here. The third was only used to calculate IDF.
+
+tfidf_tidy %>% slice_head(n = 10)
+```
+
+### Inspect sentiment-bearing words with the highest TF-IDF weights
+
+Join your tidy TF-IDF table to the Bing sentiment dictionary.
+
+Once this is done, inspect the sentiment-bearing words with the highest TF-IDF weights in each
+document. You will need these results to answer Question 3 in Part IV.
+
+```{r top-tfidf-sentiment}
+tfidf_sentiment_words <- tfidf_tidy %>%
+  inner_join(bing, by = "word")
+
+top_tfidf_sentiment_words <- tfidf_sentiment_words %>%
+  group_by(doc_title) %>%
+  slice_max(order_by = tf_idf, n = 20, with_ties = FALSE) %>% # filter, not recalculate, TF-IDF results
+  ungroup() %>%
+  arrange(doc_title, desc(tf_idf)) # arrange results by TF-IDF weight
+
+print(top_tfidf_sentiment_words, n = 40) # words contributing the most weight to documents' positive and negative sentiment totals
+```
+
+### Sum positive and negative TF-IDF weights
+
+Create a summary table with one row per document containing:
+• total TF-IDF weight of positive words
+• total TF-IDF weight of negative words
+• net TF-IDF sentiment
+
+Calculate:
+net TF-IDF sentiment = positive TF-IDF weight − negative TF-IDF weight
+
+```{r tfidf-summary}
+tfidf_sentiment_summary <- tfidf_sentiment_words %>% # sum TF-IDF weights rather than counting rows/words
+  group_by(doc_title, sentiment) %>%
+  summarise(total_tf_idf = sum(tf_idf), .groups = "drop") %>% # one row per document & sentiment
+  complete(
+    doc_title = c("Text A", "Text B"),
+    sentiment = c("positive", "negative"),
+    fill = list(total_tf_idf = 0)
+  ) %>%
+  pivot_wider(
+    names_from = sentiment,
+    values_from = total_tf_idf,
+    names_prefix = "tfidf_",
+    values_fill = 0 # replace NAs with 0
+  ) %>%
+  mutate(tfidf_net_sentiment = tfidf_positive - tfidf_negative) %>%
+  arrange(doc_title)
+
+tfidf_sentiment_summary
+```
+
+## III. Compare Raw vs. TF-IDF Sentiment
+
+Create a final table that includes:
+• raw sentiment results
+• TF-IDF–weighted sentiment results
+
+Export this table as a .csv to be posted on Canvas.
+
+```{r comparison}
+sentiment_comparison <- raw_sentiment_summary %>%
+  left_join(tfidf_sentiment_summary, by = "doc_title") %>% # combine summaries
+  arrange(doc_title)
+
+sentiment_comparison
+
+write_csv(sentiment_comparison, "sentiment_comparison.csv")
+```
+
+## IV. Interpretive questions
+
+Use the tables above to answer these questions in your Canvas response:
+
+1. What changed between the raw-count and TF-IDF methods?
+2. Why did TF-IDF alter the results?
+3. Which specific words drove the changes? Use the top TF-IDF sentiment words
+   table as evidence.
+4. When would each method be more appropriate? What limitation does document
+   length create for the raw-count sentiment measure?
+
+
+## Optional challenge: sentiment concentration vs. diffusion
+
+Using TF-IDF–weighted sentiment words:
+1. Compute total TF-IDF weight of all sentiment-bearing words in each document (positive +
+negative weights, without subtracting one from the other).
+2. Identify the top 5 sentiment words per document.
+3. Calculate the proportion of sentiment carried by those five words
+
+```{r optional}
+sentiment_concentration <- tfidf_sentiment_words %>%
+  group_by(doc_title) %>%
+  mutate(total_sentiment_tf_idf = sum(tf_idf)) %>%
+  arrange(desc(tf_idf), .by_group = TRUE) %>%
+  mutate(word_rank = row_number()) %>%
+  summarise(
+    total_sentiment_tf_idf = first(total_sentiment_tf_idf),
+    top_five_words = str_c(word[word_rank <= 5], collapse = ", "),
+    top_five_tf_idf = sum(tf_idf[word_rank <= 5]),
+    top_five_proportion = top_five_tf_idf / total_sentiment_tf_idf,
+    .groups = "drop"
+  )
+
+sentiment_concentration
+```

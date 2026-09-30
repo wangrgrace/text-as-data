@@ -1,0 +1,3 @@
+doc_title,raw_negative,raw_positive,raw_net_sentiment,tfidf_negative,tfidf_positive,tfidf_net_sentiment
+Text A,422,489,67,86.172899295898,62.867744028795464,-23.305155267102542
+Text B,281,344,63,44.19120715522032,32.69502965852134,-11.496177496698976
