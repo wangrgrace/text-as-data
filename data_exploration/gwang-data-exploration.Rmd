@@ -1,0 +1,452 @@
+---
+title: "Data Exploration"
+author: "Grace Wang"
+date: "2026-10-16"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    theme: readable
+editor_options:
+  markdown:
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+library(readr)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(tidytext)
+library(quanteda)
+library(ggplot2)
+library(tibble)
+library(knitr)
+
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.align = "center", out.width = "100%")
+input_file <- knitr::current_input()
+if (!is.null(input_file) && length(input_file) == 1 && nzchar(input_file)) {
+  project_dir <- dirname(normalizePath(input_file))
+} else {
+  wd <- normalizePath(getwd())
+  project_dir <- if (dir.exists(file.path(wd, "text_files"))) {
+    wd
+  } else {
+    file.path(wd, "data_exploration")
+  }
+}
+text_dir <- file.path(project_dir, "text_files")
+output_dir <- project_dir
+```
+
+## Preprocessing
+
+I am going to give you a choice: in Week 3, the tutorial teaches you how
+to normalize Early Modern typography using regex. You are required to
+fix the long S in these texts! However, you have a choice as to whether
+you want to normalize other issues. Beyond this required step, you have
+a choice as to whether you want to normalize additional spelling or
+typographical variation (e.g. u/v, i/j, variant spellings, punctuation).
+
+```{r preprocessing}
+text_files <- sort(list.files(text_dir, pattern = "\\.txt$", full.names = TRUE))
+stopifnot(length(text_files) == 23) # each file represents one document
+
+doc_ids <- tools::file_path_sans_ext(basename(text_files))
+raw_text <- vapply(text_files, read_file, character(1))
+names(raw_text) <- doc_ids
+
+texts <- str_to_lower(str_replace_all(raw_text, "ſ", "s")) # fix long S
+names(texts) <- doc_ids
+
+custom_stopwords <- c(
+  "vnto", "haue", "doo", "hath", "bee", "ye", "thee", "hee",
+  "shall", "hast", "doe", "beene", "thereof", "thus"
+) # custom historical stopwords from hw2
+all_stopwords <- unique(c(tidytext::stop_words$word, custom_stopwords)) # standard tidytext AND custom stopwords
+
+tokens_clean <- quanteda::tokens( # no punctuation, numbers, or symbols
+  texts,
+  remove_punct = TRUE,
+  remove_numbers = TRUE,
+  remove_symbols = TRUE
+) %>%
+  quanteda::tokens_remove(pattern = all_stopwords) %>% # remove stopwords
+  quanteda::tokens_keep(pattern = "^[a-z]+$", valuetype = "regex") # lowercase letters only
+
+dfm_counts <- quanteda::dfm(tokens_clean) # construct DFM for corpus
+
+corpus_overview <- tibble(
+  document = doc_ids,
+  characters = nchar(raw_text),
+  tokens_after_preprocessing = ntoken(dfm_counts)
+)
+corpus_overview %>%
+  kable(caption = "Corpus overview after preprocessing")
+```
+
+I have chosen to complete the structured option for this assignment.
+Stopwords were taken from the standard tidytext list (which includes
+common articles, conjunctions, and prepositions) and the custom Early
+Modern English stopwords from hw2. This facilitates comparisons between
+the topics in our 23 select Early Modern English texts. In addition to
+the long S, I also normalized capitalization, punctuation, numbers, Greek
+letters, and symbols by selecting for ASCII lowercase letters only. This
+decision was made for the ease of analyzing word counts.
+
+I have chosen not to modernize u/v, i/j, or other spelling variants.
+Without the aid of an extensive and systematic set of rules for the
+treatment of spelling variants, such blanket changes may unintentionally
+alter some words in a way we wouldn't want (e.g., replacing 'v' with 'u'
+may not be appropriate in all cases). This approach also meaningfully
+preserves historical spelling variants. Additionally, Early Modern
+English is similar enough to Modern English today to be comprehensible
+without these substitutions (unlike Old English, for example, which
+needs to be treated almost like a foreign language).
+
+## Approach 1 - TF-IDF: lexical distinctiveness
+
+TF–IDF helps identify what makes each document distinctive relative to
+the corpus as a whole.
+
+Required steps:
+
+1. Construct a document–feature matrix (DFM) for the full corpus.
+2. Compute TF–IDF weights.
+3. For *each document*, extract the *top 10–15 TF–IDF terms*.
+
+Required output:
+
+- A table (or set of tables) showing distinctive terms by document.
+
+```{r tfidf}
+dfm_tfidf <- quanteda::dfm_tfidf(dfm_counts)  # TF-IDF weights
+
+tfidf_tidy <- quanteda::convert(dfm_tfidf, to = "data.frame") %>%
+  rename(document = doc_id) %>%
+  pivot_longer(-document, names_to = "term", values_to = "tf_idf") %>%
+  filter(tf_idf > 0) %>%
+  group_by(document) %>%
+  slice_max(order_by = tf_idf, n = 15, with_ties = FALSE) %>% # top 15 TF-IDF terms in each document
+  ungroup() %>%
+  arrange(document, desc(tf_idf))
+
+write_csv(tfidf_tidy, file.path(output_dir, "tfidf_top_terms.csv")) # create table of distinctive terms by document
+tfidf_tidy %>%
+  mutate(tf_idf = round(tf_idf, 3)) %>%
+  kable(caption = "Top 15 TF-IDF terms for each document")
+```
+
+Interpretive questions (address at least two):
+
+- Do some documents share distinctive vocabulary?
+- Are distinctive terms topical, rhetorical, or technical?
+- Are there documents whose “distinctiveness” seems driven by noise or
+  formatting rather than content?
+
+Important: TF–IDF is *not* a measure of importance in the abstract.
+Interpret it relationally, always in reference to the rest of the
+corpus.
+
+Numerous texts (presumably on trade and economics) share terms such as
+"moneys", "exchange", "silver", and "commodities". A32827 and A32833
+also stand out as featuring the same top TF-IDF terms, such as
+"plantations", "abatement", "usury", "english", and "newfoundland".
+
+Words like "commodities", "abatement", and "usury" are technical terms
+used in economics, while topical terms such as "english" and
+"newfoundland" refer to the English settlements in Newfoundland. Many
+texts also feature "india" along with terms like "east" and "company",
+presumably in reference to English/British trade with the East India
+Company. Rhetorical terms are less common among the top 15 TF-IDF terms
+in each document, but some include "propose", "persuade", "question" and
+"relating".
+
+Notably, the "em" featured in A32830's top 15 TF-IDF terms is likely a 
+contraction of "them". It appears as an artifact of tokenization, after the 
+apostrophe is dropped. Similarly, the appearance of structural markers such as
+"pag" (A32827 and A32833), “arg” (A32839 and A69858), and “answ” (A69858 and 
+A32839) is likely driven by formatting (used for "page" references, "argument" 
+labels, and "answer" labels, respectively) rather than because they are tokens 
+that represent topical vocabulary terms. 
+
+## Approach 2 - Pearson correlation: similarity and differences between texts
+
+As we discussed in class, Pearson correlation treats each document as a
+vector and asks: which texts behave similarly across the vocabulary
+space? We are going to focus on Pearson for this assignment since there
+were more questions about it in class!
+
+Required steps:
+
+1. Use the DFM to compute pairwise Pearson correlations between
+   documents.
+   - Optional: consider trimming very rare words from the DFM (e.g.,
+     dfm_trim(min_termfreq = 5)) before computing correlations. Very rare
+     words help ensure that Pearson correlations reflect shared
+     patterns of language use, rather than being distorted by words that
+     appear a few times due to non-Latin alphabet use (Greek) or
+     idiosyncratic typesetting—this is due to the specific problems with
+     the Early Modern texts we are using.
+2. Visualize the results using a similarity heatmap. [We didn’t cover
+   this in the tutorials, but you can find a very generous hint at the
+   end of this assignment!]
+
+```{r similarity}
+dfm_corr <- quanteda::dfm_trim(dfm_counts, min_termfreq = 5) # remove rare terms (occurring fewer than 5 times across the corpus)
+
+sim_r <- quanteda.textstats::textstat_simil( # code taken from Approach 2 hint
+  dfm_corr,
+  margin = "documents",
+  method = "correlation"
+)
+cor_matrix <- as.matrix(sim_r) # build correlation matrix
+
+cor_long <- as.data.frame(cor_matrix) %>% # long format for ggplot
+  rownames_to_column("document_i") %>%
+  pivot_longer(-document_i, names_to = "document_j", values_to = "r")
+
+cor_pairs <- cor_long %>%
+  filter(document_i < document_j) %>%
+  arrange(desc(r))
+
+write_csv(
+  cor_pairs %>% mutate(r = round(r, 3)),
+  file.path(output_dir, "pearson_document_pairs.csv")
+) # output pairwise Pearson correlations, rounding to three decimal places
+
+most_similar <- cor_pairs %>% slice_head(n = 2) # most and least similar document pairs
+least_similar <- cor_pairs %>% arrange(r) %>% slice_head(n = 2)
+
+bind_rows(
+  most_similar %>% mutate(pair_group = "Most similar"),
+  least_similar %>% mutate(pair_group = "Least similar")
+) %>%
+  select(pair_group, document_i, document_j, r) %>%
+  mutate(r = round(r, 3)) %>%
+  kable(caption = "Two most and least similar document pairs")
+
+heat_df <- cor_long %>% mutate(r = round(r, 3)) 
+short_labels <- setNames(sub("__.*$", "", doc_ids), doc_ids)
+
+similarity_heatmap <- ggplot( # create heatmap
+  heat_df,
+  aes(x = document_j, y = document_i, fill = r)
+) +
+  geom_tile() + # colored tiles
+  coord_fixed() + # keep tiles square
+  scale_fill_gradient2(
+    low = "blue", mid = "white", high = "red",
+    midpoint = 0, limits = c(-1, 1) # center color scale at 0
+  ) +
+  labs(
+    title = "Pearson correlation between documents",
+    subtitle = "Correlations are calculated from the raw word counts of each document.",
+    x = NULL, y = NULL, fill = "Pearson r"
+  ) +
+  scale_x_discrete(labels = short_labels) +
+  scale_y_discrete(labels = short_labels) +
+  theme_minimal(base_size = 10) +
+  theme(
+    axis.text.x = element_text(angle = 60, hjust = 1, size = 7),
+    axis.text.y = element_text(size = 7),
+    panel.grid = element_blank()
+  )
+
+similarity_heatmap
+ggsave( # save heatmap as .png file
+  file.path(output_dir, "pearson_similarity_heatmap.png"),
+  similarity_heatmap, width = 11, height = 10, dpi = 300
+)
+```
+
+Required interpretation:
+
+- Identify the two most similar document pairs.
+- Identify the two least similar document pairs.
+- What questions would you ask from this corpus after seeing the
+  patterns of similarity/differences that you see here? Explain your
+  answer.
+
+Remember: in this use of Pearson correlations, you are evaluating
+patterns of similarity, not causation, as we discussed in class.
+
+The most similar document pair is A32827 and A32833, with r = 1.000 (rounded to three decimal points). Going back to the top 15 TF-IDF terms list, these share thirteen of the same terms. The second most similar document pair is A32836 and A50763, with r-value = 0.979. They share the same top 3 terms: "poor", "parish", and "fathers".
+
+The least similar document pairs are: 1) A32830 and	A93819 (r = 0.052), and 2) A06791 and A93819 (r = 0.053). We can infer from these results that text A93819 — likely a legal text given the presence of terms such as "defendants" and "prosecutors" — differs greatly in topic from the texts on trade and economics.
+
+Some potential follow-up questions that arise from this analysis include:
+
+1) If we exclude reprints/republications, does our result for the most similar document pairs change?
+
+Because texts A32827 and A32833 share nearly the same exact top 15 TF-IDF terms and have a Pearson correlation coefficient of 1.000, they may be different editions of the same text. If we had data on edition and publication date, it may be helpful in understanding the relation of these texts to one another. Unless we were specifically looking to examine the parallels in different editions of the same text, the 1.000 value otherwise might not be too helpful for our analysis.
+
+2) Which genres are represented in this corpus?
+
+In contrast to the most similar pairs, the least similar document pairs have Pearson correlation coefficients of nearly 0. For instance, A93819 might be of a completely different genre than the other texts, as judging from the pale stripes running from A93819 on both the x- and y-axes. Different genres tend to favor different writing styles and utilize different sets of terminology, which might explain why the text doesn't share many topical, rhetorical, or technical terms with the other texts.
+
+## Approach 3 - Syntactic complexity profile
+
+Syntactic complexity captures how texts are written, rather than what
+words they use. Note: I am only using the *syntactic complexity* measures
+as a way to make this more manageable. Because the dependency parser
+(udpipe in our case) can take a long time to run depending on your
+machine (and silently crash!), we are going to focus on only two texts:
+
+- Pick two texts based on the results from the first two approaches. You
+  have a lot of freedom in how you interpret this.
+
+You must implement the *syntactic* complexity framework from Week 05, including:
+
+- Sentence length
+- Clause counts
+- Dependent clauses
+- Coordination
+- Complex nominals
+
+Required measures:
+
+- Mean Length of Sentence (MLS)
+- Clauses per Sentence (C/S)
+- Dependent Clauses per Clause and/or Sentence
+- Coordination per Clause and/or Sentence
+- Complex Nominals per Clause and/or Sentence
+
+Required outputs:
+
+- A summary table reporting all syntactic measures for both texts.
+- At least one example sentence from each text that illustrates a key
+  syntactic difference you discuss.
+
+```{r syntax, results='asis'}
+if (!requireNamespace("udpipe", quietly = TRUE)) {
+  stop("Install the R package 'udpipe' with install.packages('udpipe') before rendering this section.")
+}
+
+# Select two texts
+syntax_docs <- c("A32830", "A93819")
+syntax_text <- stringr::str_replace_all(raw_text[syntax_docs], "ſ", "s") # normalize long-S
+names(syntax_text) <- syntax_docs
+
+# Load English Universal Dependencies (UD) model once
+model_path <- Sys.getenv("UDPIPE_MODEL_PATH", unset = "")
+if (!nzchar(model_path) || !file.exists(model_path)) {
+  model_dir <- file.path(tools::R_user_dir("data_exploration", which = "cache"),
+                         "udpipe-models")
+  dir.create(model_dir, showWarnings = FALSE, recursive = TRUE)
+  model_files <- list.files(model_dir, pattern = "english-ewt.*\\.udpipe$",
+                            full.names = TRUE)
+  if (length(model_files) == 0) { # download if necessary
+    model_info <- udpipe::udpipe_download_model(language = "english-ewt",
+                                                 model_dir = model_dir)
+    model_path <- model_info$file_model
+  } else {
+    model_path <- model_files[1]
+  }
+}
+
+ud_model <- udpipe::udpipe_load_model(model_path)
+
+# Parse each text with UDPipe parser
+syntax_annotations <- bind_rows(lapply(names(syntax_text), function(doc) {
+  as.data.frame(udpipe::udpipe_annotate(ud_model, x = syntax_text[[doc]], doc_id = doc))
+})) # combine token-level annotations
+
+# Mark the syntactic features in W5 framework
+syntax_features <- syntax_annotations %>%
+  mutate(
+    is_word = upos != "PUNCT", # exclude punctuation from word count
+    # Finite verbs and auxiliaries as proxy for independent clauses
+    is_clause = upos %in% c("VERB", "AUX") &
+      str_detect(coalesce(feats, ""), "VerbForm=Fin"),
+    # Dependent clauses
+    is_dependent_clause = dep_rel %in% c("advcl", "ccomp", "xcomp", "acl", "acl:relcl"),
+    # Count coordination markers
+    is_coordination = dep_rel %in% c("conj", "cc"),
+    # Nominal complexity (relations that make noun phrases more complex)
+    is_complex_nominal = dep_rel %in% c("amod", "nmod", "compound", "appos")
+  )
+
+# Aggregate syntactic feature counts, then calculate measures
+# Formula: (word count) / (sentence count) for average sentence length
+syntax_summary <- syntax_features %>%
+  group_by(doc_id) %>%
+  summarise(
+    word_tokens = sum(is_word),
+    sentences = n_distinct(sentence_id),
+    clauses = sum(is_clause),
+    dependent_clauses = sum(is_dependent_clause),
+    coordination_relations = sum(is_coordination),
+    complex_nominals = sum(is_complex_nominal),
+    mean_length_sentence = word_tokens / sentences,
+    clauses_per_sentence = clauses / sentences,
+    dependent_clauses_per_clause = dependent_clauses / clauses,
+    dependent_clauses_per_sentence = dependent_clauses / sentences,
+    coordination_per_clause = coordination_relations / clauses,
+    coordination_per_sentence = coordination_relations / sentences,
+    complex_nominals_per_clause = complex_nominals / clauses,
+    complex_nominals_per_sentence = complex_nominals / sentences,
+    .groups = "drop"
+  )
+
+write_csv(syntax_summary, file.path(output_dir, "syntax_complexity_summary.csv")) # summary table
+syntax_summary %>%
+  mutate(across(where(is.numeric), ~ round(.x, 3))) %>%
+  kable(caption = "UDPipe syntactic complexity measures")
+
+# One example sentence from each text that illustrates a key syntactic difference
+sentence_examples <- tibble(
+  document = c("A32830", "A93819"),
+  example_sentence = c(
+    "It cannot but seem something strange that it should be thought necessary in this Age of ours, that pretends to see so much further than their Ancestors: for a Man to give himself any trouble to Oppose an Assertion, which in the mildest Construction, cannot pass for less than a Paradox.",
+    "The said Persons in the Name of the City of London, (but for their own private advantage only) have Indicted the Defendant for stopping up the Stairs at Lion-Key aforesaid, and a passage formerly leading down to them; and for planking over eight foot into the River of Thames, and for erecting a Crane upon the said Key, which they say are public Nuisances."
+  )
+)
+sentence_examples %>% kable(caption = "Example sentence from each text")
+```
+
+**Interpretation**
+
+In your report, address the following:
+
+- How do the two texts differ in syntactic complexity?
+- Do these differences align with or complicate your earlier lexical
+  findings?
+- What kinds of rhetorical or stylistic practices might these syntactic
+  patterns reflect?
+
+This is the most important section of the report and it should bring
+everything together. You must articulate one central analytical
+question/hypothesis/idea that draws on:
+
+- TF–IDF evidence
+- Pearson similarity/distance evidence
+- Syntactic complexity evidence
+
+You have a lot of freedom in how to do this. I am not grading on your getting the “right” answer,
+but on demonstrating that you have carefully thought through the strengths and weaknesses of the
+methodologies as we discussed them in class.
+
+I chose texts A32830 and A93819 because the analysis in Approach 2 yielded the lowest document pair similarity coefficients. I thought it would be interesting to probe the differences in syntax between the two texts. A32830 is about trade with the East India Company, A93819 is a legal text about wharves. The two texts seem to be of different subjects and genres, which might translate to differences in sentence structure.
+
+The code draws much of its framework from the Week 5 tutorial. Looking at our results, the texts are similar in the mean length of their sentences. Text A32830 has about 20% more sentences than Text A93819 (71 vs. 60), and 2,952 tokens compared to the latter's 2,617. Overall, Text A32830 has more clauses and dependent clauses, both on a net and per-sentence basis. Text A93819 has more coordination markers (i.e., coordinated elements and words such as “trade *and commerce*”) and complex nominals (noun phrases made more complex with modifiers or other phrases) on net, per-sentence, and per-clause bases. 
+
+These differences support our findings in that within the majority of the measures we looked at, the two texts had opposing patterns. The near-zero r we obtained in Approach 2 indicates a very low linear association between their word-count profiles. The analysis finds diverging patterns in sentence structure (specifically, the UDPipe syntactic complexity measures) between the two texts, which may reflect differences in their rhetorical and stylistic practices. As seen in our example sentences, taken from the opening sentence of each text, the text on trade rebuts an opposing argument while the legal text lists details of a specific case. The former stacks numerous clauses to make qualifications to the opponent's claims, while the latter uses commas and semicolons to separate the detailed claims of the prosecutors' case. While both sentences are quite long, one can observe the contrast of the argumentative tone of the first text against the legal style of listing extensive empirical claims.
+
+## Synthesis - triangulating evidence
+
+This is the most important section of the report and it should bring everything together. You must
+articulate one central analytical question/hypothesis/idea that draws on:
+
+- TF–IDF evidence
+- Pearson similarity/distance evidence
+- Syntactic complexity evidence
+
+**Question:** What are the texts in this corpus held together by, and in what ways do they diverge? 
+
+While it doesn't wholly answer it, our analysis yields some insight into the question. The TF-IDF, for instance, hinted at recurring vocabulary throughout the texts. Some elaborated upon trade with the East India Company, while others discussed English plantations in Newfoundland. While there are some exceptions, most of them span topics in trade or, more broadly, political economy. Some of the texts that stand out as less similar across the vocabulary space can be pinpointed in our Pearson similarity map. There are pale, whitish strips (representing coefficients of r close to 0) emanating from a select few texts: A06790, A32836, A50763, and A93819. Notably, A93819 in particular was one of those featured in the least similar document pairs. It greatly differed from A32830 in both topic and syntax, which hints at the use of different writing and rhetorical styles in different genres. The actual arguments themselves are difficult to infer from these analyses alone — a weakness of approaches adjacent to bag-of-words — but a close look at one sentence from each provides an excellent example of the differences in writing style. A follow-up analysis that takes a closer look at and further breaks down sentences drawn from these texts might aid us in parsing their precise differences.
+
+## Reproducibility/Outputs
+
+Rendering this document writes three .csv files alongside the R Markdown source: `tfidf_top_terms.csv`, `pearson_document_pairs.csv`, and `syntax_complexity_summary.csv`. The heatmap is saved as `pearson_similarity_heatmap.png`.

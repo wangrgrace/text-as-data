@@ -1,0 +1,3 @@
+doc_id,word_tokens,sentences,clauses,dependent_clauses,coordination_relations,complex_nominals,mean_length_sentence,clauses_per_sentence,dependent_clauses_per_clause,dependent_clauses_per_sentence,coordination_per_clause,coordination_per_sentence,complex_nominals_per_clause,complex_nominals_per_sentence
+A32830,2952,71,261,232,261,377,41.57746478873239,3.676056338028169,0.8888888888888888,3.267605633802817,1,3.676056338028169,1.4444444444444444,5.309859154929577
+A93819,2617,60,160,135,371,453,43.61666666666667,2.6666666666666665,0.84375,2.25,2.31875,6.183333333333334,2.83125,7.55
