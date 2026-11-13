@@ -1,0 +1,158 @@
+=== L2 logistic regression ===
+Train size: 15638
+Test size : 3910
+Train labels: [7793 7845]
+Test labels: [1981 1929]
+TF-IDF features: 16198
+
+1. Confusion matrix (rows = true, columns = predicted; 0 = NEG, 1 = CORE):
+[[1906   75]
+ [ 131 1798]]
+
+2. Classification report:
+              precision    recall  f1-score   support
+
+           0      0.936     0.962     0.949      1981
+           1      0.960     0.932     0.946      1929
+
+    accuracy                          0.947      3910
+   macro avg      0.948     0.947     0.947      3910
+weighted avg      0.948     0.947     0.947      3910
+
+3. ROC AUC: 0.9867
+
+4. Non-zero coefficients: 16198 of 16198 (100.0%)
+
+Top 15 positive-weight words (most predictive of CORE = 1):
+   1. trade                +27.5556
+   2. merchants            +22.2859
+   3. merchant             +17.6244
+   4. marchants            +13.4153
+   5. marchant             +8.7089
+   6. factor               +5.1888
+   7. staple               +4.9854
+   8. commodities          +4.3283
+   9. ship                 +3.1485
+  10. buy                  +2.9950
+  11. chapman              +2.9565
+  12. exchange             +2.9491
+  13. goods                +2.9325
+  14. ships                +2.7257
+  15. money                +2.7011
+
+Top 15 negative-weight words (most predictive of NEG = 0):
+   1. god                  -3.1221
+   2. power                -1.9278
+   3. pope                 -1.8971
+   4. rome                 -1.8883
+   5. christ               -1.7666
+   6. spirit               -1.6501
+   7. enemies              -1.6452
+   8. gods                 -1.6270
+   9. forces               -1.6004
+  10. faith                -1.5932
+  11. against              -1.5706
+  12. vertue               -1.5056
+  13. that                 -1.4336
+  14. de                   -1.3527
+  15. armie                -1.3487
+
+16198 non-zero coefficients: too many to list, so only the top words are shown above.
+
+Misclassified test chunks: 75 false positives, 131 false negatives
+
+--- FALSE POSITIVES (label = NEG, model says CORE): 5 of 75, chosen at random ---
+
+[test #294]  P(CORE) = 0.571
+    Sometimes their crabbed Enuy doth inuent, Sometimes they kil with new experiment: For still they
+    er e by custome, or by chance, Ei her by malice, or by ignorance: And (hauing spent
+    prescriptions to each dram) He thinkes alas sure I protected am, If now I see our physicke does
+    no good, Or seeing I haue suckt his purse and blood, If I can tell his friends there is no hope,
+    Or that he must expect deaths fatall scope: Then shall I be discharg'd with credits fee, And to
+    condemne more liues, remaine still free. They shift their compasse to auoyd our scorne, Hiding
+    their actions from the faire-fac'd morne.
+
+[test #1494]  P(CORE) = 0.813
+    the tiger admiral the Matthew vice-admiral and the Richard and Barnard have make all thing ready
+    for to fight these five ship which rid here the one be a great ship of biscay of seven hundred
+    ton and the two hollander which we find the six of june in pooppy-bay and one small pink of
+    Amsterdam and another small ship of Rochel this great ship of biscay a biscayn ship of 700. tun
+    which we expect will have fight with we send their captain aboard of we before we come to a
+    anchor and submit themselves unto the general the two ship of Amsterdam who master name be these
+    viz.
+
+[test #2151]  P(CORE) = 0.885
+    For Bayes, Sayes, Perpetuanoes, and the like Commoditiet, Licence of Tobacco. which these two
+    yeares haue beene solde in Spaine with 15. vpon the hundred losse to procure money to buy the
+    same, are now sold to so much profite, besides the benefite of his Maiesties imposition and
+    aduancement of the Virginia and Bermodaes Plantation: the like may bee practised vpon other
+    Commodities, without incurring the inconuenciences of Monopolie. Concerning Companies or
+    Societies to deale in a ioynt Stocke or apart: it may bee thought Ioynt Stockes or apart.
+    conuenient to haue ioynt Stockes for Remote places, as the East Indies and Persia.
+
+[test #2632]  P(CORE) = 0.540
+    All the different parts of its price will soon sink to their natural rate,       and the whole
+    price to its natural price. The natural price, therefore, is, as it were, the central price, to
+    which       the prices of all commodities are continually gravitating. Different       accidents
+    may sometimes keep them suspended a good deal above it, and       sometimes force them down even
+    somewhat below it. But whatever may be the       obstacles which hinder them from settling in
+    this centre of repose and       continuance, they are constantly tending towards it. The whole
+    quantity of industry annually employed in order to bring any       commodity to market,
+    naturally suits itself in this manner to the       effectual demand.
+
+[test #3860]  P(CORE) = 0.636
+    And for to purvey store of  corne, some were sent to the Volsci, others to Cumes. Over and
+    besides the licence of selling salt, because it was sold at an exceeding high price, was taken
+    from private salters, and was undertaken by the citie, with all the cost and charges ther to
+    belonging by them defraied, and salt delivered out to the people at an easie reckoning. The
+    commons also were freed of portage, tollage, and tribute; and rich men that were able to beare
+    the burthen, were assessed at all paiments and contributions: the poore were thought to be
+    charged enough with the bringing up of their children.
+
+--- FALSE NEGATIVES (label = CORE, model says NEG): 5 of 131, chosen at random ---
+
+[test #379]  P(CORE) = 0.394
+    I cannot, but, by the way, tell you of one that very narrowly escaped the danger of Black-
+    Friers, and accompanied me that night to my Lodging: his name was Parker, one that had beene
+    long a Trader and Factor for the Papacie beyond the seas. Hee told mee by the way, that nothing
+    grieued him more, then that hee had not beene one of those that dyed by the afore-said
+    mischance.
+
+[test #1896]  P(CORE) = 0.485
+    (You blessed people answer all Amen.) Then shall thy flocke be excellently fed, Like the
+    Camelion of the Ayre bred. Thou hast nor Arte, nor wit, to feed thy sheepe, No more then Wolfe,
+    or Foxe thy lambs to keepe. Thou know'st no more the Scriptures to vnfolde, Then doth Aphron
+    th'Alchimist to make golde. But flesh is fraile, and thou art loath to say, That which we
+    shepheards ^ounden in our lay. That thou wilt stay thy selfe vpon this ground* As fast as will
+    the Hare before the Hound. Returne therefore vnto thy trade againe, For in the Church thou
+    labourest in vaine. Think'st thou our Bishops will thee deigne to preach, Rude, vnlearned, a
+    Mercinany* Dog-leach?
+
+[test #3003]  P(CORE) = 0.413
+    Among other things of one Henry de Hasseld, merchant trafficking from the Low Countries to Berg
+    in Norwege: who hauing heard a belly-god Preacher speaking ill of the miraculous fasts, as
+    though it were not in Gods power to doe that which he hath done in times past, prouoked by it,
+    did assay to fast, and abstained himselfe three daies from eating: At the end whereof, being
+    pinched with hunger, tooke a morsell of bread, meaning to swallow it downe  with a glasse of
+    Beere: but all that stucke so in his throate, that he remained forty daies and forty nights
+    without either eating or drinking.
+
+[test #3158]  P(CORE) = 0.414
+    You (Cozen) are but a young man, and know not the world as I doe; I am an old Lad, and haue What
+    a Traueller must doe, when he comes to his Inne. a great deale of experience of these things,
+    and therefore let me aduise you, that you neuer trust your trunkes, but with a sure and strong
+    locke; and when you are iourneying vpon the way, carry along with you in your pocket, or your
+    port-manteau, some good pad-locke, to fasten to the staple of the chamber doore, where you
+    lodge.
+
+[test #3798]  P(CORE) = 0.290
+    This yeare Iohn Heywood was attached for treason, for denying the Kings supremacy, but he
+    recanted, and confessed to the people, that the Pope had no more authority then other Bishops,
+    and that the King was supreame head by the Law of God. The destruction of Merindall and
+    Cabriers. IN the yeare 1218. as is aforesaid, God raised vp one Waldo, a rich Merchant of Lyons
+    in France, which hauing attained perfect knowledge by the word of God, discouered the naughtines
+    of the Ecclesiastical Ministers, many ioyned themselues vnto them, which were called Waldenses,
+    and being by persecution dispersed into di^ers Countries, there were two towns remaining of
+    their Religion in France, to wit; Merindall and Gabriers.
+
+Saved all 206 misclassified chunks to /Users/gracewang/Documents/Duke/Fall 2026/Text as Data - Language Models, AI, and NLP Techniques/text-as-data/hw3/outputs/l2_misclassified.csv
